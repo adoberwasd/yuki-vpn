@@ -3,96 +3,23 @@ import { servers, type Server as ServerType } from './data/servers';
 import {
   ShieldIcon, ServerIcon, UserIcon, LifebuoyIcon, GlobeIcon,
   SearchIcon, ZapIcon, LockIcon, ActivityIcon, ChevronDownIcon,
-  XIcon, CheckIcon, MessageCircleIcon, BookIcon, SettingsIcon,
+  MessageCircleIcon, BookIcon, SettingsIcon,
   WifiIcon, MailIcon, PhoneIcon, ArrowRightIcon
 } from './components/Icons';
+import { Toast } from './components/Toast';
+import { t, type Lang } from './i18n/translations';
 
+/* ──────────── Types ──────────── */
 type Tab = 'home' | 'servers' | 'profile' | 'support';
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
+type SubPage = null | 'settings' | 'security' | 'devices' | 'subscription' | 'privacy';
 
-/* ──────────── Connection Modal ──────────── */
-function ConnectionModal({
-  server, state, progress, onClose, onDisconnect
-}: {
-  server: ServerType; state: ConnectionState; progress: number;
-  onClose: () => void; onDisconnect: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-sm rounded-3xl bg-gradient-to-br from-[#1a1028] to-[#0f0a18] border border-purple-500/30 shadow-2xl shadow-purple-900/50 p-6 relative overflow-hidden">
-        {/* Background glow */}
-        <div className="absolute -top-20 -right-20 w-40 h-40 bg-purple-600/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-violet-600/15 rounded-full blur-3xl" />
-
-        <button onClick={onClose} className="absolute top-4 right-4 text-purple-400 hover:text-white transition-colors">
-          <XIcon size={20} />
-        </button>
-
-        <div className="relative z-10 flex flex-col items-center">
-          {/* Server flag & name */}
-          <div className="text-6xl mb-3">{server.flag}</div>
-          <h3 className="text-xl font-bold text-white">{server.name}</h3>
-          <p className="text-purple-400 text-sm mb-6">{server.country} • {server.city}</p>
-
-          {state === 'connecting' && (
-            <div className="w-full">
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full border-4 border-purple-500/30 border-t-purple-500 animate-spin" />
-                <div>
-                  <p className="text-white font-medium">Connecting...</p>
-                  <p className="text-purple-400 text-xs">{Math.round(progress)}%</p>
-                </div>
-              </div>
-              <div className="w-full h-2 bg-[#1a1028] rounded-full overflow-hidden border border-purple-500/20">
-                <div
-                  className="h-full bg-gradient-to-r from-purple-600 via-violet-500 to-purple-400 rounded-full transition-all duration-300 ease-out relative"
-                  style={{ width: `${progress}%` }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
-                </div>
-              </div>
-              <div className="flex justify-between mt-2 text-xs text-purple-500">
-                <span>Resolving DNS...</span>
-                <span>{server.ping}ms</span>
-              </div>
-            </div>
-          )}
-
-          {state === 'connected' && (
-            <div className="w-full text-center">
-              <div className="w-16 h-16 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <CheckIcon size={32} className="text-green-400" />
-              </div>
-              <p className="text-green-400 font-bold text-lg mb-1">Connected!</p>
-              <p className="text-purple-400 text-sm mb-4">Your IP is now protected</p>
-              <button
-                onClick={onDisconnect}
-                className="w-full py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 transition-all font-medium"
-              >
-                Disconnect
-              </button>
-            </div>
-          )}
-
-          {state === 'error' && (
-            <div className="w-full text-center">
-              <div className="w-16 h-16 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center mx-auto mb-4">
-                <XIcon size={32} className="text-red-400" />
-              </div>
-              <p className="text-red-400 font-bold text-lg mb-1">Connection Failed</p>
-              <p className="text-purple-400 text-sm mb-4">Unable to connect to server. Try again.</p>
-              <button
-                onClick={onClose}
-                className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 transition-all text-white font-medium"
-              >
-                Close
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+/* ──────────── Toast Hook ──────────── */
+function useToast() {
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; title: string; message: string; serverFlag?: string; serverName?: string; actionLabel?: string; onAction?: () => void } | null>(null);
+  const show = useCallback((data: typeof toast) => setToast(data), []);
+  const hide = useCallback(() => setToast(null), []);
+  return { toast, show, hide };
 }
 
 /* ──────────── Server Card ──────────── */
@@ -100,16 +27,25 @@ function ServerCard({ server, onConnect, isConnected }: { server: ServerType; on
   return (
     <button
       onClick={onConnect}
-      className={`w-full flex items-center gap-3 p-3.5 rounded-2xl transition-all duration-200 group ${
+      className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all duration-200 group ${
         isConnected
-          ? 'bg-green-500/15 border border-green-500/40 shadow-lg shadow-green-500/10'
-          : 'bg-[#16102a] border border-purple-500/10 hover:border-purple-500/40 hover:bg-[#1d1538] hover:shadow-lg hover:shadow-purple-500/10'
+          ? 'bg-green-500/10 border border-green-500/40 shadow-lg shadow-green-500/10'
+          : 'bg-[#16102a] border border-purple-500/10 hover:border-purple-500/30 hover:bg-[#1d1538] hover:shadow-lg hover:shadow-purple-500/10'
       }`}
     >
       <span className="text-2xl flex-shrink-0">{server.flag}</span>
       <div className="flex-1 min-w-0 text-left">
         <div className="flex items-center gap-2">
-          <span className="text-white font-medium truncate">{server.name}</span>
+          <span className="text-white font-medium text-sm truncate">{server.name}</span>
+          {server.special && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold flex-shrink-0 ${
+              server.specialTag === 'LTE'
+                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+            }`}>
+              {server.specialTag}
+            </span>
+          )}
           {isConnected && (
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
           )}
@@ -121,7 +57,7 @@ function ServerCard({ server, onConnect, isConnected }: { server: ServerType; on
           <ActivityIcon size={12} />
           <span>{server.ping}ms</span>
         </div>
-        <div className="w-16 h-1.5 bg-[#0f0a1a] rounded-full mt-1.5 overflow-hidden">
+        <div className="w-14 h-1.5 bg-[#0f0a1a] rounded-full mt-1.5 overflow-hidden">
           <div
             className={`h-full rounded-full transition-all ${
               server.capacity > 75 ? 'bg-red-500' : server.capacity > 45 ? 'bg-yellow-500' : 'bg-green-500'
@@ -134,41 +70,42 @@ function ServerCard({ server, onConnect, isConnected }: { server: ServerType; on
   );
 }
 
-/* ──────────── HOME TAB ──────────── */
+/* ──────────── HOME ──────────── */
 function HomeTab({
-  connectedServer, connectionState, onConnectBest
+  connectedServer, connectionState, onConnectBest, lang
 }: {
   connectedServer: ServerType | null;
   connectionState: ConnectionState;
   onConnectBest: () => void;
+  lang: Lang;
 }) {
-  const bestServer = useMemo(() => servers.reduce((a: ServerType, b: ServerType) => a.ping < b.ping ? a : b), [servers]);
+  const bestServer = useMemo(() => servers.reduce((a: ServerType, b: ServerType) => a.ping < b.ping ? a : b), []);
   const isConnecting = connectionState === 'connecting';
   const isConnected = connectionState === 'connected';
 
   return (
-    <div className="px-5 pb-28 pt-6">
-      {/* Hero connection card */}
+    <div className="px-5 pb-32 pt-6">
+      {/* Hero */}
       <div className="relative rounded-3xl overflow-hidden mb-6">
         <div className="bg-gradient-to-br from-purple-600/40 via-violet-700/40 to-indigo-800/40 border border-purple-500/30 p-6">
           <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/20 rounded-full blur-3xl" />
           <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-3">
               <ShieldIcon size={18} className="text-purple-300" />
               <span className="text-purple-300 text-sm font-medium">
-                {isConnected ? 'Protected' : isConnecting ? 'Connecting...' : 'Not Protected'}
+                {isConnected ? t('protected', lang) : isConnecting ? t('connecting', lang) : t('notProtected', lang)}
               </span>
             </div>
-            <h2 className="text-3xl font-bold text-white mb-1">
+            <h2 className="text-4xl font-bold text-white mb-2">
               {isConnected ? connectedServer?.flag || '' : isConnecting ? '🔗' : '🛡️'}
             </h2>
-            <p className="text-white/80 text-lg font-medium mb-4">
+            <p className="text-white/80 text-lg font-medium mb-5">
               {isConnected
-                ? `Connected to ${connectedServer?.name}`
+                ? `${t('connectedTo', lang)} ${connectedServer?.name}`
                 : isConnecting
-                ? 'Establishing secure tunnel'
-                : 'Tap to connect'}
+                ? t('securingConnection', lang)
+                : t('tapToConnect', lang)}
             </p>
 
             {!isConnected && !isConnecting && (
@@ -176,14 +113,14 @@ function HomeTab({
                 onClick={onConnectBest}
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-bold text-lg transition-all shadow-lg shadow-purple-600/30 hover:shadow-purple-500/40 active:scale-[0.98]"
               >
-                Connect to {bestServer.city} {bestServer.flag}
+                {t('connectTo', lang)} {bestServer.city} {bestServer.flag}
               </button>
             )}
 
             {isConnecting && (
-              <div className="w-full py-4 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center gap-2">
+              <div className="w-full py-4 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center gap-3">
                 <div className="w-5 h-5 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
-                <span className="text-purple-300 font-medium">Securing your connection...</span>
+                <span className="text-purple-300 font-medium">{t('securingConnection', lang)}</span>
               </div>
             )}
           </div>
@@ -195,36 +132,36 @@ function HomeTab({
         <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-3 text-center">
           <WifiIcon size={20} className="text-purple-400 mx-auto mb-1" />
           <p className="text-white font-bold text-lg">{isConnected ? '256' : '0'}</p>
-          <p className="text-purple-500 text-xs">Mbps</p>
+          <p className="text-purple-500 text-xs">{t('Mbps', lang)}</p>
         </div>
         <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-3 text-center">
           <LockIcon size={20} className="text-purple-400 mx-auto mb-1" />
           <p className="text-white font-bold text-lg">AES-256</p>
-          <p className="text-purple-500 text-xs">Encryption</p>
+          <p className="text-purple-500 text-xs">{t('encryption', lang)}</p>
         </div>
         <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-3 text-center">
           <ZapIcon size={20} className="text-purple-400 mx-auto mb-1" />
           <p className="text-white font-bold text-lg">{isConnected ? connectedServer?.ping || '--' : '--'}</p>
-          <p className="text-purple-500 text-xs">Ping (ms)</p>
+          <p className="text-purple-500 text-xs">{t('ping', lang)}</p>
         </div>
       </div>
 
       {/* Features */}
-      <h3 className="text-white font-bold text-lg mb-3">Features</h3>
+      <h3 className="text-white font-bold text-lg mb-3">{t('features', lang)}</h3>
       <div className="space-y-3">
         {[
-          { icon: <ShieldIcon size={20} />, title: 'Kill Switch', desc: 'Auto-disconnect if VPN drops', color: 'text-green-400' },
-          { icon: <GlobeIcon size={20} />, title: '170+ Servers', desc: 'Across 20+ countries', color: 'text-blue-400' },
-          { icon: <LockIcon size={20} />, title: 'No Logs', desc: 'Your data stays yours', color: 'text-purple-400' },
-          { icon: <ZapIcon size={20} />, title: 'Lightning Fast', desc: 'Up to 10Gbps speeds', color: 'text-yellow-400' },
+          { icon: <ShieldIcon size={20} />, titleKey: 'killSwitch' as const, descKey: 'killSwitchDesc' as const, color: 'text-green-400' },
+          { icon: <GlobeIcon size={20} />, titleKey: 'serversCount' as const, descKey: 'serversCountDesc' as const, color: 'text-blue-400' },
+          { icon: <LockIcon size={20} />, titleKey: 'noLogs' as const, descKey: 'noLogsDesc' as const, color: 'text-purple-400' },
+          { icon: <ZapIcon size={20} />, titleKey: 'lightningFast' as const, descKey: 'lightningFastDesc' as const, color: 'text-yellow-400' },
         ].map((f, i) => (
           <div key={i} className="flex items-center gap-4 bg-[#16102a] border border-purple-500/10 rounded-2xl p-4">
             <div className={`w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center ${f.color}`}>
               {f.icon}
             </div>
             <div>
-              <p className="text-white font-medium">{f.title}</p>
-              <p className="text-purple-400 text-sm">{f.desc}</p>
+              <p className="text-white font-medium">{t(f.titleKey, lang)}</p>
+              <p className="text-purple-400 text-sm">{t(f.descKey, lang)}</p>
             </div>
           </div>
         ))}
@@ -233,13 +170,14 @@ function HomeTab({
   );
 }
 
-/* ──────────── SERVERS TAB ──────────── */
+/* ──────────── SERVERS ──────────── */
 function ServersTab({
-  onConnect, connectedServer, connectionState
+  onConnect, connectedServer, connectionState, lang
 }: {
   onConnect: (s: ServerType) => void;
   connectedServer: ServerType | null;
   connectionState: ConnectionState;
+  lang: Lang;
 }) {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'ping' | 'name' | 'country'>('ping');
@@ -263,6 +201,9 @@ function ServersTab({
       s.city.toLowerCase().includes(search.toLowerCase())
     );
     result.sort((a: ServerType, b: ServerType) => {
+      // Special servers first
+      if (a.special && !b.special) return -1;
+      if (!a.special && b.special) return 1;
       if (sortBy === 'ping') return a.ping - b.ping;
       if (sortBy === 'country') return a.country.localeCompare(b.country);
       return a.name.localeCompare(b.name);
@@ -271,15 +212,14 @@ function ServersTab({
   }, [search, sortBy]);
 
   return (
-    <div className="px-5 pb-28 pt-6">
-      {/* Search & Sort */}
+    <div className="px-5 pb-32 pt-6">
       <div className="flex gap-2 mb-4">
         <div className="flex-1 relative">
           <SearchIcon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-purple-400" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search servers..."
+            placeholder={t('searchServers', lang)}
             className="w-full bg-[#16102a] border border-purple-500/20 rounded-xl pl-10 pr-4 py-3 text-white placeholder-purple-500 text-sm focus:outline-none focus:border-purple-500/50 transition-colors"
           />
         </div>
@@ -291,16 +231,20 @@ function ServersTab({
             <ChevronDownIcon size={18} />
           </button>
           {showSortDropdown && (
-            <div className="absolute right-0 top-full mt-2 w-40 bg-[#1a1028] border border-purple-500/30 rounded-xl shadow-xl shadow-purple-900/50 overflow-hidden z-30">
-              {(['ping', 'name', 'country'] as const).map(s => (
+            <div className="absolute right-0 top-full mt-2 w-44 bg-[#1a1028] border border-purple-500/30 rounded-xl shadow-xl shadow-purple-900/50 overflow-hidden z-30">
+              {([
+                ['ping', 'sortByPing'],
+                ['name', 'sortByName'],
+                ['country', 'sortByCountry'],
+              ] as const).map(([key, label]) => (
                 <button
-                  key={s}
-                  onClick={() => { setSortBy(s); setShowSortDropdown(false); }}
+                  key={key}
+                  onClick={() => { setSortBy(key); setShowSortDropdown(false); }}
                   className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                    sortBy === s ? 'bg-purple-600/30 text-white' : 'text-purple-400 hover:bg-purple-500/10'
+                    sortBy === key ? 'bg-purple-600/30 text-white' : 'text-purple-400 hover:bg-purple-500/10'
                   }`}
                 >
-                  {s === 'ping' ? '⚡ Lowest Ping' : s === 'name' ? '🔤 By Name' : '🌍 By Country'}
+                  {t(label, lang)}
                 </button>
               ))}
             </div>
@@ -308,8 +252,28 @@ function ServersTab({
         </div>
       </div>
 
+      {/* Special servers section */}
+      {filtered.some(s => s.special) && (
+        <div className="mb-3">
+          <div className="flex items-center gap-2 mb-2">
+            <ZapIcon size={14} className="text-yellow-400" />
+            <span className="text-yellow-400 text-xs font-bold uppercase tracking-wider">Special Servers</span>
+          </div>
+          <div className="space-y-2 mb-3">
+            {filtered.filter((s: ServerType) => s.special).map(s => (
+              <ServerCard
+                key={s.id}
+                server={s}
+                onConnect={() => onConnect(s)}
+                isConnected={connectionState === 'connected' && connectedServer?.id === s.id}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-3">
-        <p className="text-purple-400 text-sm">{filtered.length} servers</p>
+        <p className="text-purple-400 text-sm">{filtered.filter((s: ServerType) => !s.special).length} {t('serversLabel', lang)}</p>
         {connectedServer && connectionState === 'connected' && (
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -318,9 +282,8 @@ function ServersTab({
         )}
       </div>
 
-      {/* Server list */}
-      <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1 scrollbar-thin">
-        {filtered.map((s: ServerType) => (
+      <div className="space-y-2 max-h-[calc(100vh-240px)] overflow-y-auto pr-1">
+        {filtered.filter((s: ServerType) => !s.special).map((s: ServerType) => (
           <ServerCard
             key={s.id}
             server={s}
@@ -328,10 +291,10 @@ function ServersTab({
             isConnected={connectionState === 'connected' && connectedServer?.id === s.id}
           />
         ))}
-        {filtered.length === 0 && (
+        {filtered.filter((s: ServerType) => !s.special).length === 0 && (
           <div className="text-center py-16">
             <GlobeIcon size={48} className="text-purple-600 mx-auto mb-3" />
-            <p className="text-purple-400">No servers found</p>
+            <p className="text-purple-400">{t('noServersFound', lang)}</p>
           </div>
         )}
       </div>
@@ -339,150 +302,362 @@ function ServersTab({
   );
 }
 
-/* ──────────── PROFILE TAB ──────────── */
-function ProfileTab() {
+/* ──────────── SETTINGS SUB-PAGE ──────────── */
+function SettingsPage({ lang, setLang, onBack }: { lang: Lang; setLang: (l: Lang) => void; onBack: () => void }) {
+  const [killSwitch, setKillSwitch] = useState(true);
+  const [autoConnect, setAutoConnect] = useState(false);
+  const [dnsProtection, setDnsProtection] = useState(true);
+
   return (
-    <div className="px-5 pb-28 pt-6">
-      {/* Profile header */}
-      <div className="flex flex-col items-center mb-8">
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-violet-700 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/30 border-4 border-purple-400/30">
-          <span className="text-3xl font-bold text-white">Y</span>
+    <div className="px-5 pb-32 pt-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
+        <ArrowRightIcon size={16} className="rotate-180" />
+        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+      </button>
+      <h2 className="text-2xl font-bold text-white mb-6">{t('settingsTitle', lang)}</h2>
+
+      <div className="space-y-3">
+        {/* Language */}
+        <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+                <GlobeIcon size={20} />
+              </div>
+              <div>
+                <p className="text-white font-medium">{t('language', lang)}</p>
+                <p className="text-purple-500 text-sm">{t('languageDesc', lang)}</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 ml-[52px]">
+            <button
+              onClick={() => setLang('ru')}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                lang === 'ru' ? 'bg-purple-600 text-white' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+              }`}
+            >
+              🇷🇺 Русский
+            </button>
+            <button
+              onClick={() => setLang('en')}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                lang === 'en' ? 'bg-purple-600 text-white' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+              }`}
+            >
+              🇬🇧 English
+            </button>
+          </div>
         </div>
-        <h2 className="text-2xl font-bold text-white">Yuki Tanaka</h2>
-        <p className="text-purple-400 text-sm mb-1">yuki@yukivpn.io</p>
-        <div className="flex items-center gap-2 mt-2">
-          <span className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold">PREMIUM</span>
-          <span className="text-purple-400 text-xs">Expires Dec 2026</span>
+
+        {/* Protocol */}
+        <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+              <WifiIcon size={20} />
+            </div>
+            <div className="flex-1">
+              <p className="text-white font-medium">{t('protocol', lang)}</p>
+              <p className="text-purple-500 text-sm">{t('protocolDesc', lang)}</p>
+            </div>
+            <span className="text-purple-300 text-sm bg-purple-500/10 px-3 py-1 rounded-lg border border-purple-500/20">WireGuard</span>
+          </div>
+        </div>
+
+        {/* Toggles */}
+        {[
+          { label: t('autoConnect', lang), desc: t('autoConnectDesc', lang), val: autoConnect, set: setAutoConnect },
+          { label: t('killSwitchToggle', lang), desc: t('killSwitchToggleDesc', lang), val: killSwitch, set: setKillSwitch },
+          { label: t('dnsLeakProtection', lang), desc: t('dnsLeakProtectionDesc', lang), val: dnsProtection, set: setDnsProtection },
+        ].map((item, i) => (
+          <div key={i} className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-white font-medium">{item.label}</p>
+              <p className="text-purple-500 text-sm">{item.desc}</p>
+            </div>
+            <button
+              onClick={() => item.set(!item.val)}
+              className={`w-12 h-7 rounded-full transition-all relative ${item.val ? 'bg-purple-600' : 'bg-purple-500/20'}`}
+            >
+              <div className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow ${item.val ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+        ))}
+
+        {/* Version */}
+        <div className="text-center pt-4">
+          <p className="text-purple-600 text-xs">{t('version', lang)}</p>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Plan info */}
+/* ──────────── SECURITY SUB-PAGE ──────────── */
+function SecurityPage({ lang, onBack }: { lang: Lang; onBack: () => void }) {
+  const [twoFA, setTwoFA] = useState(false);
+
+  return (
+    <div className="px-5 pb-32 pt-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
+        <ArrowRightIcon size={16} className="rotate-180" />
+        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+      </button>
+      <h2 className="text-2xl font-bold text-white mb-6">{t('securityTitle', lang)}</h2>
+      <div className="space-y-3">
+        <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400"><LockIcon size={20} /></div>
+            <div>
+              <p className="text-white font-medium">{t('twoFA', lang)}</p>
+              <p className="text-purple-500 text-sm">{t('twoFADesc', lang)}</p>
+            </div>
+          </div>
+          <button onClick={() => setTwoFA(!twoFA)} className={`w-12 h-7 rounded-full transition-all relative ${twoFA ? 'bg-purple-600' : 'bg-purple-500/20'}`}>
+            <div className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow ${twoFA ? 'left-6' : 'left-1'}`} />
+          </button>
+        </div>
+        {[
+          { icon: <LockIcon size={20} />, label: t('password', lang), desc: t('passwordDesc', lang) },
+          { icon: <ActivityIcon size={20} />, label: t('sessions', lang), desc: t('sessionsDesc', lang) },
+          { icon: <ShieldIcon size={20} />, label: t('biometrics', lang), desc: t('biometricsDesc', lang) },
+        ].map((item, i) => (
+          <button key={i} className="w-full flex items-center gap-3 p-4 bg-[#16102a] border border-purple-500/10 rounded-2xl hover:border-purple-500/30 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">{item.icon}</div>
+            <div className="flex-1 text-left">
+              <p className="text-white font-medium">{item.label}</p>
+              <p className="text-purple-500 text-sm">{item.desc}</p>
+            </div>
+            <ArrowRightIcon size={16} className="text-purple-600 group-hover:text-purple-400" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ──────────── DEVICES SUB-PAGE ──────────── */
+function DevicesPage({ lang, onBack }: { lang: Lang; onBack: () => void }) {
+  return (
+    <div className="px-5 pb-32 pt-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
+        <ArrowRightIcon size={16} className="rotate-180" />
+        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+      </button>
+      <h2 className="text-2xl font-bold text-white mb-6">{t('devicesTitle', lang)}</h2>
+      <p className="text-purple-400 text-sm mb-4">{t('connectedDevices', lang)}</p>
+      <div className="space-y-3">
+        {[
+          { icon: '📱', name: t('device1', lang), status: t('deviceStatus', lang) },
+          { icon: '💻', name: t('device2', lang), status: t('deviceStatus', lang) },
+          { icon: '📋', name: t('device3', lang), status: t('deviceStatus', lang) },
+        ].map((dev, i) => (
+          <div key={i} className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-2xl">{dev.icon}</span>
+            <div className="flex-1">
+              <p className="text-white font-medium">{dev.name}</p>
+              <p className="text-green-400 text-xs">{dev.status}</p>
+            </div>
+            <button className="text-red-400 text-xs px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all">
+              {t('disconnectDevice', lang)}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ──────────── SUBSCRIPTION SUB-PAGE ──────────── */
+function SubscriptionPage({ lang, onBack }: { lang: Lang; onBack: () => void }) {
+  return (
+    <div className="px-5 pb-32 pt-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
+        <ArrowRightIcon size={16} className="rotate-180" />
+        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+      </button>
+      <h2 className="text-2xl font-bold text-white mb-6">{t('subscriptionTitle', lang)}</h2>
       <div className="bg-gradient-to-br from-purple-600/20 to-violet-700/20 border border-purple-500/30 rounded-2xl p-5 mb-6">
-        <h3 className="text-white font-bold mb-3">Your Plan</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-purple-300 text-sm">Plan</span>
-            <span className="text-white font-medium">Premium Annual</span>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="px-2 py-0.5 rounded-md bg-purple-600 text-white text-xs font-bold">{t('premium', lang)}</span>
+        </div>
+        <div className="space-y-2">
+          <div className="flex justify-between"><span className="text-purple-300 text-sm">{t('currentPlan', lang)}</span><span className="text-white font-medium">{t('premiumAnnual', lang)}</span></div>
+          <div className="flex justify-between"><span className="text-purple-300 text-sm">{t('nextBilling', lang)}</span><span className="text-white font-medium">{t('billingDate', lang)}</span></div>
+          <div className="flex justify-between"><span className="text-purple-300 text-sm">{t('paymentMethod', lang)}</span><span className="text-white font-medium">{t('paymentCard', lang)}</span></div>
+        </div>
+      </div>
+      <div className="space-y-3">
+        <button className="w-full py-3.5 rounded-2xl bg-[#16102a] border border-purple-500/20 text-white font-medium hover:border-purple-500/40 transition-all">
+          {t('manageSubscription', lang)}
+        </button>
+        <button className="w-full py-3.5 rounded-2xl border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all font-medium">
+          {t('cancelSubscription', lang)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────── PRIVACY SUB-PAGE ──────────── */
+function PrivacyPage({ lang, onBack }: { lang: Lang; onBack: () => void }) {
+  return (
+    <div className="px-5 pb-32 pt-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
+        <ArrowRightIcon size={16} className="rotate-180" />
+        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+      </button>
+      <h2 className="text-2xl font-bold text-white mb-6">{t('privacyTitle', lang)}</h2>
+      <div className="space-y-3">
+        {[
+          { icon: <ShieldIcon size={20} />, label: t('dataCollection', lang), desc: t('dataCollectionDesc', lang) },
+          { icon: <EyeIcon size={20} />, label: t('adTracking', lang), desc: t('adTrackingDesc', lang) },
+        ].map((item, i) => (
+          <div key={i} className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">{item.icon}</div>
+            <div>
+              <p className="text-white font-medium">{item.label}</p>
+              <p className="text-purple-500 text-sm">{item.desc}</p>
+            </div>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-purple-300 text-sm">Devices</span>
-            <span className="text-white font-medium">3 / 5</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-purple-300 text-sm">Data Used</span>
-            <span className="text-white font-medium">142.3 GB</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-purple-300 text-sm">Member Since</span>
-            <span className="text-white font-medium">Jan 2025</span>
-          </div>
+        ))}
+        <button className="w-full py-3.5 rounded-2xl bg-[#16102a] border border-purple-500/20 text-white font-medium hover:border-purple-500/40 transition-all mt-4">
+          {t('clearCache', lang)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EyeIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+/* ──────────── PROFILE TAB ──────────── */
+function ProfileTab({ subPage, setSubPage, lang, setLang }: { subPage: SubPage; setSubPage: (p: SubPage) => void; lang: Lang; setLang: (l: Lang) => void }) {
+  if (subPage === 'settings') return <SettingsPage lang={lang} setLang={setLang} onBack={() => setSubPage(null)} />;
+  if (subPage === 'security') return <SecurityPage lang={lang} onBack={() => setSubPage(null)} />;
+  if (subPage === 'devices') return <DevicesPage lang={lang} onBack={() => setSubPage(null)} />;
+  if (subPage === 'subscription') return <SubscriptionPage lang={lang} onBack={() => setSubPage(null)} />;
+  if (subPage === 'privacy') return <PrivacyPage lang={lang} onBack={() => setSubPage(null)} />;
+
+  return (
+    <div className="px-5 pb-32 pt-6">
+      <div className="flex flex-col items-center mb-8">
+        <div className="w-24 h-24 rounded-full overflow-hidden mb-4 shadow-lg shadow-purple-500/30 border-4 border-purple-400/30 bg-purple-900/50 flex items-center justify-center">
+          <img
+            src="https://i.ibb.co/8gt7pYzz/8-B69-F972-4-D0-B-4123-B804-57-D1813-EE322.png"
+            alt="YUKI VPN"
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-3xl font-bold text-white">Y</span>'; }}
+          />
+        </div>
+        <h2 className="text-2xl font-bold text-white">{t('profileName', lang)}</h2>
+        <p className="text-purple-400 text-sm mb-1">{t('profileEmail', lang)}</p>
+        <div className="flex items-center gap-2 mt-2">
+          <span className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-600 to-violet-600 text-white text-xs font-bold">{t('premium', lang)}</span>
+          <span className="text-purple-400 text-xs">{t('expires', lang)}</span>
         </div>
       </div>
 
-      {/* Menu items */}
+      <div className="bg-gradient-to-br from-purple-600/20 to-violet-700/20 border border-purple-500/30 rounded-2xl p-5 mb-6">
+        <h3 className="text-white font-bold mb-3">{t('yourPlan', lang)}</h3>
+        <div className="space-y-3">
+          <div className="flex justify-between"><span className="text-purple-300 text-sm">{t('plan', lang)}</span><span className="text-white font-medium">{t('premiumAnnual', lang)}</span></div>
+          <div className="flex justify-between"><span className="text-purple-300 text-sm">{t('devices', lang)}</span><span className="text-white font-medium">3 / 5</span></div>
+          <div className="flex justify-between"><span className="text-purple-300 text-sm">{t('dataUsed', lang)}</span><span className="text-white font-medium">142.3 GB</span></div>
+          <div className="flex justify-between"><span className="text-purple-300 text-sm">{t('memberSince', lang)}</span><span className="text-white font-medium">Jan 2025</span></div>
+        </div>
+      </div>
+
       <div className="space-y-2">
         {[
-          { icon: <SettingsIcon size={20} />, label: 'Settings', sub: 'Preferences, security' },
-          { icon: <LockIcon size={20} />, label: 'Security', sub: '2FA, passwords' },
-          { icon: <WifiIcon size={20} />, label: 'Devices', sub: 'Manage connected devices' },
-          { icon: <BookIcon size={20} />, label: 'Subscription', sub: 'Billing & plans' },
-          { icon: <ShieldIcon size={20} />, label: 'Privacy', sub: 'Data & tracking' },
+          { icon: <SettingsIcon size={20} />, label: t('settings', lang), desc: t('settingsDesc', lang), page: 'settings' as SubPage },
+          { icon: <LockIcon size={20} />, label: t('security', lang), desc: t('securityDesc', lang), page: 'security' as SubPage },
+          { icon: <WifiIcon size={20} />, label: t('devicesLabel', lang), desc: t('devicesDesc', lang), page: 'devices' as SubPage },
+          { icon: <BookIcon size={20} />, label: t('subscription', lang), desc: t('subscriptionDesc', lang), page: 'subscription' as SubPage },
+          { icon: <ShieldIcon size={20} />, label: t('privacy', lang), desc: t('privacyDesc', lang), page: 'privacy' as SubPage },
         ].map((item, i) => (
-          <button key={i} className="w-full flex items-center gap-4 p-4 bg-[#16102a] border border-purple-500/10 rounded-2xl hover:border-purple-500/30 transition-all group">
+          <button key={i} onClick={() => setSubPage(item.page)} className="w-full flex items-center gap-4 p-4 bg-[#16102a] border border-purple-500/10 rounded-2xl hover:border-purple-500/30 transition-all group">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 group-hover:text-purple-300 transition-colors">
               {item.icon}
             </div>
             <div className="flex-1 text-left">
               <p className="text-white font-medium">{item.label}</p>
-              <p className="text-purple-500 text-sm">{item.sub}</p>
+              <p className="text-purple-500 text-sm">{item.desc}</p>
             </div>
             <ArrowRightIcon size={16} className="text-purple-600 group-hover:text-purple-400 transition-colors" />
           </button>
         ))}
       </div>
 
-      {/* Logout */}
       <button className="w-full mt-4 py-3.5 rounded-2xl border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-all font-medium">
-        Log Out
+        {t('logout', lang)}
       </button>
     </div>
   );
 }
 
 /* ──────────── SUPPORT TAB ──────────── */
-function SupportTab() {
+function SupportTab({ lang }: { lang: Lang }) {
   const [selectedFaq, setSelectedFaq] = useState<number | null>(null);
 
   const faqs = [
-    { q: 'How does YUKI VPN protect my data?', a: 'YUKI VPN uses AES-256 encryption, the same standard used by governments and military. All your data is encrypted before it leaves your device.' },
-    { q: 'Can I use YUKI VPN on multiple devices?', a: 'Yes! Premium plan allows up to 5 simultaneous connections. Basic plan supports 2 devices.' },
-    { q: 'Why is my connection slow?', a: 'Try connecting to a server closer to your location. You can also try changing the protocol in Settings > Connection.' },
-    { q: 'Does YUKI VPN keep logs?', a: 'No. YUKI VPN has a strict no-logs policy. We do not store any browsing history, connection logs, or personal data.' },
-    { q: 'How do I cancel my subscription?', a: 'Go to Profile > Subscription > Cancel. You will have access until the end of your billing period.' },
+    { q: t('faq1q', lang), a: t('faq1a', lang) },
+    { q: t('faq2q', lang), a: t('faq2a', lang) },
+    { q: t('faq3q', lang), a: t('faq3a', lang) },
+    { q: t('faq4q', lang), a: t('faq4a', lang) },
+    { q: t('faq5q', lang), a: t('faq5a', lang) },
   ];
 
   return (
-    <div className="px-5 pb-28 pt-6">
-      {/* Header */}
+    <div className="px-5 pb-32 pt-6">
       <div className="text-center mb-8">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-700 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-purple-500/30">
           <LifebuoyIcon size={28} className="text-white" />
         </div>
-        <h2 className="text-2xl font-bold text-white">Support Center</h2>
-        <p className="text-purple-400 text-sm mt-1">We're here to help 24/7</p>
+        <h2 className="text-2xl font-bold text-white">{t('supportCenter', lang)}</h2>
+        <p className="text-purple-400 text-sm mt-1">{t('hereToHelp', lang)}</p>
       </div>
 
-      {/* Quick contact cards */}
       <div className="grid grid-cols-2 gap-3 mb-6">
-        <button className="bg-[#16102a] border border-purple-500/15 rounded-2xl p-4 text-center hover:border-purple-500/40 transition-all group">
-          <MessageCircleIcon size={28} className="text-purple-400 mx-auto mb-2 group-hover:text-purple-300" />
-          <p className="text-white font-medium text-sm">Live Chat</p>
-          <p className="text-green-400 text-xs mt-0.5">● Online</p>
-        </button>
-        <button className="bg-[#16102a] border border-purple-500/15 rounded-2xl p-4 text-center hover:border-purple-500/40 transition-all group">
-          <MailIcon size={28} className="text-purple-400 mx-auto mb-2 group-hover:text-purple-300" />
-          <p className="text-white font-medium text-sm">Email</p>
-          <p className="text-purple-400 text-xs mt-0.5">support@yukivpn.io</p>
-        </button>
-        <button className="bg-[#16102a] border border-purple-500/15 rounded-2xl p-4 text-center hover:border-purple-500/40 transition-all group">
-          <PhoneIcon size={28} className="text-purple-400 mx-auto mb-2 group-hover:text-purple-300" />
-          <p className="text-white font-medium text-sm">Phone</p>
-          <p className="text-purple-400 text-xs mt-0.5">+1-800-YUKI-VPN</p>
-        </button>
-        <button className="bg-[#16102a] border border-purple-500/15 rounded-2xl p-4 text-center hover:border-purple-500/40 transition-all group">
-          <BookIcon size={28} className="text-purple-400 mx-auto mb-2 group-hover:text-purple-300" />
-          <p className="text-white font-medium text-sm">Knowledge Base</p>
-          <p className="text-purple-400 text-xs mt-0.5">Browse articles</p>
-        </button>
+        {[
+          { icon: <MessageCircleIcon size={28} />, label: t('liveChat', lang), sub: t('online', lang), subColor: 'text-green-400' },
+          { icon: <MailIcon size={28} />, label: t('email', lang), sub: 'support@yukivpn.io', subColor: 'text-purple-400' },
+          { icon: <PhoneIcon size={28} />, label: t('phone', lang), sub: '+1-800-YUKI-VPN', subColor: 'text-purple-400' },
+          { icon: <BookIcon size={28} />, label: t('knowledgeBase', lang), sub: t('browseArticles', lang), subColor: 'text-purple-400' },
+        ].map((c, i) => (
+          <button key={i} className="bg-[#16102a] border border-purple-500/15 rounded-2xl p-4 text-center hover:border-purple-500/40 transition-all group">
+            <div className="text-purple-400 group-hover:text-purple-300 mb-2 flex justify-center">{c.icon}</div>
+            <p className="text-white font-medium text-sm">{c.label}</p>
+            <p className={`${c.subColor} text-xs mt-0.5`}>{c.sub}</p>
+          </button>
+        ))}
       </div>
 
-      {/* FAQ */}
-      <h3 className="text-white font-bold text-lg mb-3">Frequently Asked Questions</h3>
+      <h3 className="text-white font-bold text-lg mb-3">{t('faq', lang)}</h3>
       <div className="space-y-2 mb-6">
         {faqs.map((faq, i) => (
           <div key={i} className="bg-[#16102a] border border-purple-500/10 rounded-2xl overflow-hidden">
-            <button
-              onClick={() => setSelectedFaq(selectedFaq === i ? null : i)}
-              className="w-full flex items-center justify-between p-4 text-left"
-            >
+            <button onClick={() => setSelectedFaq(selectedFaq === i ? null : i)} className="w-full flex items-center justify-between p-4 text-left">
               <span className="text-white font-medium text-sm pr-3">{faq.q}</span>
               <ChevronDownIcon size={16} className={`text-purple-400 flex-shrink-0 transition-transform ${selectedFaq === i ? 'rotate-180' : ''}`} />
             </button>
-            {selectedFaq === i && (
-              <div className="px-4 pb-4">
-                <p className="text-purple-300 text-sm leading-relaxed">{faq.a}</p>
-              </div>
-            )}
+            {selectedFaq === i && <div className="px-4 pb-4"><p className="text-purple-300 text-sm leading-relaxed">{faq.a}</p></div>}
           </div>
         ))}
       </div>
 
-      {/* Submit ticket */}
       <div className="bg-gradient-to-br from-purple-600/20 to-violet-700/20 border border-purple-500/30 rounded-2xl p-5">
-        <h3 className="text-white font-bold mb-2">Still need help?</h3>
-        <p className="text-purple-400 text-sm mb-4">Submit a support ticket and we'll get back to you within 24 hours.</p>
+        <h3 className="text-white font-bold mb-2">{t('stillNeedHelp', lang)}</h3>
+        <p className="text-purple-400 text-sm mb-4">{t('ticketDesc', lang)}</p>
         <button className="w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-medium transition-all shadow-lg shadow-purple-600/20">
-          Submit Ticket
+          {t('submitTicket', lang)}
         </button>
       </div>
     </div>
@@ -494,18 +669,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [connectedServer, setConnectedServer] = useState<ServerType | null>(null);
-  const [connectingServer, setConnectingServer] = useState<ServerType | null>(null);
+  const [_connectingServer, setConnectingServer] = useState<ServerType | null>(null);
   const [progress, setProgress] = useState(0);
+  const [subPage, setSubPage] = useState<SubPage>(null);
+  const [lang, setLang] = useState<Lang>('ru');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toast, show: showToast, hide: hideToast } = useToast();
 
   const connect = useCallback((server: ServerType) => {
     setConnectingServer(server);
     setConnectionState('connecting');
     setProgress(0);
 
-    const duration = Math.random() * 5000 + 2000; // 2-7 seconds
-    const willFail = Math.random() < 0.15; // 15% error rate
+    const duration = Math.random() * 5000 + 2000;
+    const willFail = Math.random() < 0.15;
     const step = 30;
 
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -524,50 +702,79 @@ export default function App() {
       if (willFail) {
         setConnectionState('error');
         setProgress(0);
+        showToast({
+          type: 'error',
+          title: t('connectionError', lang),
+          message: t('connectionErrorDesc', lang),
+          serverFlag: server.flag,
+          serverName: `${server.city}, ${server.country}`,
+          actionLabel: t('retry', lang),
+          onAction: () => connect(server),
+        });
       } else {
         setProgress(100);
         setConnectionState('connected');
         setConnectedServer(server);
+        showToast({
+          type: 'success',
+          title: t('connectionSuccess', lang),
+          message: t('connectionSuccessDesc', lang),
+          serverFlag: server.flag,
+          serverName: `${server.city}, ${server.country}`,
+          actionLabel: t('disconnect', lang),
+          onAction: () => { setConnectionState('disconnected'); setConnectedServer(null); hideToast(); },
+        });
       }
       setConnectingServer(null);
     }, duration);
-  }, []);
+  }, [lang, showToast, hideToast]);
 
-  const disconnect = useCallback(() => {
-    setConnectionState('disconnected');
-    setConnectedServer(null);
-    setConnectingServer(null);
-    setProgress(0);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-  }, []);
-
-  const closeModal = useCallback(() => {
-    setConnectionState('disconnected');
-    setConnectingServer(null);
-    setProgress(0);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-  }, []);
+  // disconnect handled via toast onAction
+  void (function() {})();
 
   const bestServer = useMemo(() => servers.reduce((a: ServerType, b: ServerType) => a.ping < b.ping ? a : b), []);
 
-  const showModal = connectionState === 'connecting' || connectionState === 'connected' || connectionState === 'error';
+  // Connection progress bar (mini)
+  const phaseText = connectionState === 'connecting'
+    ? progress < 30 ? t('resolving', lang)
+    : progress < 60 ? t('establishing', lang)
+    : progress < 90 ? t('verifying', lang)
+    : t('finalizing', lang)
+    : '';
 
   return (
     <div className="min-h-screen bg-[#0b0714] text-white selection:bg-purple-500/40">
+      {/* Toast */}
+      {toast && (
+        <Toast
+          type={toast.type}
+          title={toast.title}
+          message={toast.message}
+          serverFlag={toast.serverFlag}
+          serverName={toast.serverName}
+          actionLabel={toast.actionLabel}
+          onAction={toast.onAction}
+          onClose={hideToast}
+        />
+      )}
+
       {/* Status bar */}
       <div className="sticky top-0 z-40 bg-[#0b0714]/80 backdrop-blur-xl border-b border-purple-500/10">
         <div className="max-w-lg mx-auto px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
-              <ShieldIcon size={18} className="text-white" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-lg shadow-purple-500/20">
+              <img
+                src="https://i.ibb.co/8gt7pYzz/8-B69-F972-4-D0-B-4123-B804-57-D1813-EE322.png"
+                alt="YUKI VPN"
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="w-full h-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>'; }}
+              />
             </div>
             <div>
               <h1 className="text-lg font-bold bg-gradient-to-r from-white to-purple-300 bg-clip-text text-transparent leading-tight">
-                YUKI VPN
+                {t('appTitle', lang)}
               </h1>
-              <p className="text-[10px] text-purple-500 leading-tight">Secure. Fast. Private.</p>
+              <p className="text-[10px] text-purple-500 leading-tight">{t('appTagline', lang)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -583,33 +790,44 @@ export default function App() {
                 ? 'bg-red-500/15 text-red-400 border border-red-500/20'
                 : 'bg-purple-500/10 text-purple-400 border border-purple-500/15'
             }`}>
-              {connectionState === 'connected' ? 'Connected'
-                : connectionState === 'connecting' ? 'Connecting'
-                : connectionState === 'error' ? 'Error'
-                : 'Disconnected'}
+              {connectionState === 'connected' ? t('protected', lang)
+                : connectionState === 'connecting' ? t('connecting', lang)
+                : connectionState === 'error' ? lang === 'ru' ? 'Ошибка' : 'Error'
+                : t('notProtected', lang)}
             </span>
           </div>
         </div>
+        {/* Connection progress bar */}
+        {connectionState === 'connecting' && (
+          <div className="max-w-lg mx-auto">
+            <div className="flex items-center justify-between px-5 py-1.5 text-[10px] text-purple-400 bg-purple-500/5">
+              <span>{phaseText}</span>
+              <span>{Math.round(progress)}%</span>
+            </div>
+            <div className="h-0.5 bg-purple-500/10">
+              <div className="h-full bg-gradient-to-r from-purple-600 via-violet-500 to-purple-400 transition-all duration-300" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="max-w-lg mx-auto">
         {activeTab === 'home' && (
-          <HomeTab
-            connectedServer={connectedServer}
-            connectionState={connectionState}
-            onConnectBest={() => connect(bestServer)}
-          />
+          <HomeTab connectedServer={connectedServer} connectionState={connectionState} onConnectBest={() => connect(bestServer)} lang={lang} />
         )}
         {activeTab === 'servers' && (
-          <ServersTab
-            onConnect={connect}
-            connectedServer={connectedServer}
-            connectionState={connectionState}
-          />
+          <ServersTab onConnect={connect} connectedServer={connectedServer} connectionState={connectionState} lang={lang} />
         )}
-        {activeTab === 'profile' && <ProfileTab />}
-        {activeTab === 'support' && <SupportTab />}
+        {activeTab === 'profile' && (
+          <ProfileTab subPage={subPage} setSubPage={setSubPage} lang={lang} setLang={setLang} />
+        )}
+        {activeTab === 'support' && <SupportTab lang={lang} />}
+      </div>
+
+      {/* Footer */}
+      <div className="fixed bottom-[72px] left-0 right-0 z-30 text-center pb-2 pointer-events-none">
+        <p className="text-[10px] text-purple-800/60">{t('allRightsReserved', lang)}</p>
       </div>
 
       {/* Bottom navigation */}
@@ -617,48 +835,33 @@ export default function App() {
         <div className="max-w-lg mx-auto bg-[#0b0714]/90 backdrop-blur-xl border-t border-purple-500/10">
           <div className="flex items-center justify-around py-2 px-2">
             {([
-              { tab: 'home' as Tab, icon: <ShieldIcon size={22} />, label: 'Home' },
-              { tab: 'servers' as Tab, icon: <ServerIcon size={22} />, label: 'Servers' },
-              { tab: 'profile' as Tab, icon: <UserIcon size={22} />, label: 'Profile' },
-              { tab: 'support' as Tab, icon: <LifebuoyIcon size={22} />, label: 'Support' },
+              { tab: 'home' as Tab, icon: <ShieldIcon size={22} />, label: t('home', lang) },
+              { tab: 'servers' as Tab, icon: <ServerIcon size={22} />, label: t('servers', lang) },
+              { tab: 'profile' as Tab, icon: <UserIcon size={22} />, label: t('profile', lang) },
+              { tab: 'support' as Tab, icon: <LifebuoyIcon size={22} />, label: t('support', lang) },
             ]).map(item => (
               <button
                 key={item.tab}
-                onClick={() => setActiveTab(item.tab)}
+                onClick={() => { setActiveTab(item.tab); setSubPage(null); }}
                 className={`flex flex-col items-center gap-1 py-2 px-4 rounded-xl transition-all min-w-[60px] ${
-                  activeTab === item.tab
-                    ? 'text-purple-400'
-                    : 'text-purple-600 hover:text-purple-400'
+                  activeTab === item.tab ? 'text-purple-400' : 'text-purple-600 hover:text-purple-400'
                 }`}
               >
                 {item.icon}
                 <span className="text-[10px] font-medium">{item.label}</span>
-                {activeTab === item.tab && (
-                  <div className="w-1 h-1 rounded-full bg-purple-400" />
-                )}
+                {activeTab === item.tab && <div className="w-1 h-1 rounded-full bg-purple-400" />}
               </button>
             ))}
           </div>
         </div>
       </nav>
 
-      {/* Connection modal */}
-      {showModal && connectingServer && (
-        <ConnectionModal
-          server={connectingServer}
-          state={connectionState}
-          progress={progress}
-          onClose={closeModal}
-          onDisconnect={disconnect}
-        />
+      {/* Language override for Settings sub-page */}
+      {subPage === 'settings' && (
+        <div className="hidden">
+          {/* We handle lang changes directly in the component */}
+        </div>
       )}
-
-      {/* Footer */}
-      <div className="fixed bottom-[68px] left-0 right-0 z-30 text-center pb-2">
-        <p className="text-[10px] text-purple-700">
-          © 2026 YUKI VPN™. All rights reserved. Licensed under YUKI Technologies Inc.
-        </p>
-      </div>
     </div>
   );
 }
