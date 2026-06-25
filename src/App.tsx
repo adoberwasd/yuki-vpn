@@ -103,63 +103,79 @@ function ConnectionModal({
 }
 
 /* ──────────── Server Card ──────────── */
-function ServerCard({ server, onConnect, isConnected, lang }: { server: ServerType; onConnect: () => void; isConnected: boolean; lang: Lang }) {
+function ServerCard({ server, onConnect, onDisconnect, isConnected, lang }: { server: ServerType; onConnect: () => void; onDisconnect: () => void; isConnected: boolean; lang: Lang }) {
   const country = localizeCountry(server.country, lang);
   return (
-    <button
-      onClick={onConnect}
+    <div
       className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all duration-200 group ${
         isConnected
           ? 'bg-green-500/10 border border-green-500/40 shadow-lg shadow-green-500/10'
           : 'bg-[#16102a] border border-purple-500/10 hover:border-purple-500/30 hover:bg-[#1d1538] hover:shadow-lg hover:shadow-purple-500/10'
       }`}
     >
-      <span className="text-2xl flex-shrink-0">{server.flag}</span>
-      <div className="flex-1 min-w-0 text-left">
-        <div className="flex items-center gap-2">
-          <span className="text-white font-medium text-sm truncate">{server.name}</span>
-          {server.special && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold flex-shrink-0 bg-gradient-to-r from-yellow-500/30 to-orange-500/30 text-yellow-300 border border-yellow-500/40">
-              {server.specialTag}
-            </span>
-          )}
-          {isConnected && (
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
-          )}
+      <button onClick={onConnect} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+        <span className="text-2xl flex-shrink-0">{server.flag}</span>
+        <div className="flex-1 min-w-0 text-left">
+          <div className="flex items-center gap-2">
+            <span className="text-white font-medium text-sm truncate">{server.name}</span>
+            {server.special && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold flex-shrink-0 bg-gradient-to-r from-yellow-500/30 to-orange-500/30 text-yellow-300 border border-yellow-500/40">
+                {server.specialTag}
+              </span>
+            )}
+            {isConnected && (
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+            )}
+          </div>
+          <p className="text-purple-400 text-xs">{country}</p>
         </div>
-        <p className="text-purple-400 text-xs">{country}</p>
-      </div>
-      <div className="text-right flex-shrink-0">
-        <div className="flex items-center gap-1 text-xs text-purple-400">
-          <ActivityIcon size={12} />
-          <span>{server.ping}ms</span>
-        </div>
-        <div className="w-14 h-1.5 bg-[#0f0a1a] rounded-full mt-1.5 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${
-              server.capacity > 75 ? 'bg-red-500' : server.capacity > 45 ? 'bg-yellow-500' : 'bg-green-500'
-            }`}
-            style={{ width: `${server.capacity}%` }}
-          />
-        </div>
-      </div>
-    </button>
+      </button>
+      {isConnected ? (
+        <button
+          onClick={onDisconnect}
+          className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/25 transition-all active:scale-95"
+        >
+          {lang === 'ru' ? 'Отключить' : 'Disconnect'}
+        </button>
+      ) : (
+        <button onClick={onConnect} className="text-right flex-shrink-0">
+          <div className="flex items-center gap-1 text-xs text-purple-400">
+            <ActivityIcon size={12} />
+            <span>{server.ping}ms</span>
+          </div>
+          <div className="w-14 h-1.5 bg-[#0f0a1a] rounded-full mt-1.5 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                server.capacity > 75 ? 'bg-red-500' : server.capacity > 45 ? 'bg-yellow-500' : 'bg-green-500'
+              }`}
+              style={{ width: `${server.capacity}%` }}
+            />
+          </div>
+        </button>
+      )}
+    </div>
   );
 }
 
 /* ──────────── HOME ──────────── */
 function HomeTab({
-  connectedServer, connectionState, onConnectBest, onChooseOther, lang
+  connectedServer, connectionState, onConnectBest, onChooseOther, onDisconnect, lang
 }: {
   connectedServer: ServerType | null;
   connectionState: ConnectionState;
   onConnectBest: () => void;
   onChooseOther: () => void;
+  onDisconnect: () => void;
   lang: Lang;
 }) {
   const bestServer = useMemo(() => servers.reduce((a: ServerType, b: ServerType) => a.ping < b.ping ? a : b), []);
   const isConnecting = connectionState === 'connecting';
   const isConnected = connectionState === 'connected';
+
+  // Display full server name like "LTE | Анти-чебурнет | #1" instead of just city
+  const recommendedFullName = bestServer.city
+    ? `${bestServer.city}, ${localizeCountry(bestServer.country, lang)}`
+    : bestServer.name;
 
   return (
     <div className="px-5 pb-32 pt-6">
@@ -171,7 +187,7 @@ function HomeTab({
             {isConnected ? t('protected', lang) : isConnecting ? t('connecting', lang) : t('notProtected', lang)}
           </span>
         </div>
-        {/* Country flag (for connected or recommended) */}
+        {/* Country flag */}
         {isConnected && connectedServer ? (
           <span className="text-3xl">{connectedServer.flag}</span>
         ) : isConnecting ? (
@@ -185,10 +201,19 @@ function HomeTab({
       <h2 className="text-2xl font-bold text-white mb-2">
         {isConnected ? t('connectedTo', lang) : t('tapToConnect', lang)}
       </h2>
-      {isConnected && (
-        <p className="text-purple-300 text-base font-medium mb-6">{connectedServer?.name}</p>
+      {isConnected && connectedServer && (
+        <p className="text-purple-300 text-base font-medium mb-1">{connectedServer.name}</p>
       )}
-      {!isConnected && !isConnecting && <div className="mb-6" />}
+      {isConnected && connectedServer && (
+        <p className="text-purple-500 text-xs mb-4">
+          {connectedServer.city ? `${connectedServer.city}, ${localizeCountry(connectedServer.country, lang)}` : localizeCountry(connectedServer.country, lang)}
+          {connectedServer.special && <span className="ml-1">• {connectedServer.ping}ms</span>}
+        </p>
+      )}
+      {!isConnected && (
+        <p className="text-purple-400 text-sm mb-1">{recommendedFullName}</p>
+      )}
+      {!isConnected && <div className="mb-4" />}
 
       {/* Connect button */}
       {!isConnected && !isConnecting && (
@@ -197,7 +222,27 @@ function HomeTab({
             onClick={onConnectBest}
             className="w-full py-5 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-bold text-lg transition-all shadow-lg shadow-purple-600/30 hover:shadow-purple-500/40 active:scale-[0.98]"
           >
-            {t('connectTo', lang)} {bestServer.city} {bestServer.flag}
+            {t('connectTo', lang)} {bestServer.name} {bestServer.flag}
+          </button>
+          <button
+            onClick={onChooseOther}
+            className="w-full py-4 rounded-2xl bg-[#16102a] border border-purple-500/20 hover:border-purple-500/40 text-purple-300 hover:text-white transition-all flex items-center justify-center gap-2"
+          >
+            <GlobeIcon size={18} />
+            <span className="font-medium">{t('chooseOtherServer', lang)}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Connected buttons */}
+      {isConnected && (
+        <div className="space-y-3 mb-2">
+          <button
+            onClick={onDisconnect}
+            className="w-full py-5 rounded-2xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold text-lg transition-all shadow-lg shadow-red-600/30 hover:shadow-red-500/40 active:scale-[0.98] flex items-center justify-center gap-2"
+          >
+            <div className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+            {t('disconnect', lang)}
           </button>
           <button
             onClick={onChooseOther}
@@ -261,9 +306,10 @@ function HomeTab({
 
 /* ──────────── SERVERS ──────────── */
 function ServersTab({
-  onConnect, connectedServer, connectionState, lang
+  onConnect, onDisconnect, connectedServer, connectionState, lang
 }: {
   onConnect: (s: ServerType) => void;
+  onDisconnect: () => void;
   connectedServer: ServerType | null;
   connectionState: ConnectionState;
   lang: Lang;
@@ -365,6 +411,7 @@ function ServersTab({
                 key={s.id}
                 server={s}
                 onConnect={() => onConnect(s)}
+                onDisconnect={onDisconnect}
                 isConnected={connectionState === 'connected' && connectedServer?.id === s.id}
                 lang={lang}
               />
@@ -389,6 +436,7 @@ function ServersTab({
             key={s.id}
             server={s}
             onConnect={() => onConnect(s)}
+            onDisconnect={onDisconnect}
             isConnected={connectionState === 'connected' && connectedServer?.id === s.id}
             lang={lang}
           />
@@ -833,6 +881,16 @@ export default function App() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, []);
 
+  const disconnect = useCallback(() => {
+    setConnectionState('disconnected');
+    setConnectedServer(null);
+    setConnectingServer(null);
+    setProgress(0);
+    hideToast();
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }, [hideToast]);
+
   const bestServer = useMemo(() => servers.reduce((a: ServerType, b: ServerType) => a.ping < b.ping ? a : b), []);
 
   const Footer = () => (
@@ -857,30 +915,33 @@ export default function App() {
         />
       )}
 
-      {/* Status bar */}
-      <div className="sticky top-0 z-40 bg-[#0b0714]/80 backdrop-blur-xl border-b border-purple-500/10">
-        <div className="max-w-lg mx-auto px-5 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-lg shadow-purple-500/20">
+      {/* Status bar — compact, respects safe area */}
+      <div
+        className="sticky top-0 z-40 bg-[#0b0714]/85 backdrop-blur-xl border-b border-purple-500/10"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+        <div className="max-w-lg mx-auto px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 shadow-lg shadow-purple-500/20">
               <img
                 src="https://i.ibb.co/8gt7pYzz/8-B69-F972-4-D0-B-4123-B804-57-D1813-EE322.png"
                 alt="YUKI VPN"
                 className="w-full h-full object-cover"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="w-full h-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>'; }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="w-full h-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>'; }}
               />
             </div>
-            <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-white to-purple-300 bg-clip-text text-transparent leading-tight">
+            <div className="leading-tight">
+              <h1 className="text-base font-bold bg-gradient-to-r from-white to-purple-300 bg-clip-text text-transparent">
                 {t('appTitle', lang)}
               </h1>
-              <p className="text-[10px] text-purple-500 leading-tight">{t('appTagline', lang)}</p>
+              <p className="text-[9px] text-purple-500">{t('appTagline', lang)}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {connectionState === 'connected' && (
-              <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             )}
-            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
               connectionState === 'connected'
                 ? 'bg-green-500/15 text-green-400 border border-green-500/20'
                 : connectionState === 'connecting'
@@ -899,7 +960,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div className="max-w-lg mx-auto pb-24">
+      <div className="max-w-lg mx-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 90px)' }}>
         {activeTab === 'home' && (
           <>
             <HomeTab
@@ -907,6 +968,7 @@ export default function App() {
               connectionState={connectionState}
               onConnectBest={() => connect(bestServer)}
               onChooseOther={() => setActiveTab('servers')}
+              onDisconnect={disconnect}
               lang={lang}
             />
             <Footer />
@@ -914,7 +976,7 @@ export default function App() {
         )}
         {activeTab === 'servers' && (
           <>
-            <ServersTab onConnect={connect} connectedServer={connectedServer} connectionState={connectionState} lang={lang} />
+            <ServersTab onConnect={connect} onDisconnect={disconnect} connectedServer={connectedServer} connectionState={connectionState} lang={lang} />
             <Footer />
           </>
         )}
@@ -933,9 +995,12 @@ export default function App() {
       </div>
 
       {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40">
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-40"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         <div className="max-w-lg mx-auto bg-[#0b0714]/90 backdrop-blur-xl border-t border-purple-500/10">
-          <div className="flex items-center justify-around py-2 px-2">
+          <div className="flex items-center justify-around py-1.5 px-2">
             {([
               { tab: 'home' as Tab, icon: <ShieldIcon size={22} />, label: t('home', lang) },
               { tab: 'servers' as Tab, icon: <ServerIcon size={22} />, label: t('servers', lang) },
