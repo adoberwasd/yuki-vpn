@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { servers, type Server as ServerType } from './data/servers';
+import { countries } from './data/countries';
 import {
   ShieldIcon, ServerIcon, UserIcon, LifebuoyIcon, GlobeIcon,
   SearchIcon, ZapIcon, LockIcon, ActivityIcon, ChevronDownIcon,
-  MessageCircleIcon, BookIcon, SettingsIcon,
+  XIcon, MessageCircleIcon, BookIcon, SettingsIcon,
   WifiIcon, MailIcon, PhoneIcon, ArrowRightIcon
 } from './components/Icons';
 import { Toast } from './components/Toast';
-import { t, type Lang } from './i18n/translations';
+import { t, localizeCountry, type Lang } from './i18n/translations';
 
 /* ──────────── Types ──────────── */
 type Tab = 'home' | 'servers' | 'profile' | 'support';
@@ -22,8 +23,88 @@ function useToast() {
   return { toast, show, hide };
 }
 
+/* ──────────── Connection Modal ──────────── */
+function ConnectionModal({
+  server, state, progress, onClose, lang
+}: {
+  server: ServerType; state: ConnectionState; progress: number;
+  onClose: () => void; lang: Lang;
+}) {
+  const phaseText = state === 'connecting'
+    ? progress < 30 ? t('resolving', lang)
+    : progress < 60 ? t('establishing', lang)
+    : progress < 90 ? t('verifying', lang)
+    : t('finalizing', lang)
+    : '';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm rounded-3xl bg-gradient-to-br from-[#1a0d2e] via-[#150a25] to-[#0f0820] border-2 border-purple-500/40 shadow-2xl shadow-purple-900/60 p-6 relative overflow-hidden">
+        <div className="absolute -top-20 -right-20 w-40 h-40 bg-purple-600/30 rounded-full blur-3xl" />
+        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-violet-600/20 rounded-full blur-3xl" />
+
+        <button onClick={onClose} className="absolute top-4 right-4 text-purple-400 hover:text-white transition-colors z-20">
+          <XIcon size={20} />
+        </button>
+
+        <div className="relative z-10 flex flex-col items-center">
+          <div className="text-7xl mb-3 drop-shadow-lg">{server.flag}</div>
+          <h3 className="text-2xl font-bold text-white mb-1">{server.name}</h3>
+          <p className="text-purple-300 text-sm mb-6">
+            {localizeCountry(server.country, lang)}{server.city ? ` • ${server.city}` : ''}
+          </p>
+
+          {state === 'connecting' && (
+            <div className="w-full">
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <div className="relative w-14 h-14">
+                  <div className="absolute inset-0 rounded-full border-4 border-purple-500/20" />
+                  <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-purple-400 border-r-purple-300 animate-spin" />
+                </div>
+                <div>
+                  <p className="text-white font-bold">{t('connecting', lang)}</p>
+                  <p className="text-purple-300 text-sm">{Math.round(progress)}%</p>
+                </div>
+              </div>
+              <div className="w-full h-2 bg-[#0f0820] rounded-full overflow-hidden border border-purple-500/30">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-600 via-violet-500 to-purple-400 rounded-full transition-all duration-300 ease-out relative"
+                  style={{ width: `${progress}%` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse" />
+                </div>
+              </div>
+              <div className="flex justify-between mt-2 text-xs text-purple-400">
+                <span>{phaseText}</span>
+                <span>{server.ping}ms</span>
+              </div>
+            </div>
+          )}
+
+          {state === 'connected' && (
+            <div className="w-full text-center">
+              <div className="w-16 h-16 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center mx-auto mb-4">
+                <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse" />
+              </div>
+              <p className="text-green-400 font-bold text-lg">{t('connectionSuccess', lang)}</p>
+            </div>
+          )}
+
+          {state === 'error' && (
+            <div className="w-full text-center">
+              <p className="text-red-400 font-bold text-lg mb-2">{t('connectionError', lang)}</p>
+              <p className="text-purple-300 text-sm">{t('connectionErrorDesc', lang)}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ──────────── Server Card ──────────── */
-function ServerCard({ server, onConnect, isConnected }: { server: ServerType; onConnect: () => void; isConnected: boolean }) {
+function ServerCard({ server, onConnect, isConnected, lang }: { server: ServerType; onConnect: () => void; isConnected: boolean; lang: Lang }) {
+  const country = localizeCountry(server.country, lang);
   return (
     <button
       onClick={onConnect}
@@ -38,11 +119,7 @@ function ServerCard({ server, onConnect, isConnected }: { server: ServerType; on
         <div className="flex items-center gap-2">
           <span className="text-white font-medium text-sm truncate">{server.name}</span>
           {server.special && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold flex-shrink-0 ${
-              server.specialTag === 'LTE'
-                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-            }`}>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold flex-shrink-0 bg-gradient-to-r from-yellow-500/30 to-orange-500/30 text-yellow-300 border border-yellow-500/40">
               {server.specialTag}
             </span>
           )}
@@ -50,7 +127,7 @@ function ServerCard({ server, onConnect, isConnected }: { server: ServerType; on
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
           )}
         </div>
-        <p className="text-purple-400 text-xs">{server.country}</p>
+        <p className="text-purple-400 text-xs">{country}</p>
       </div>
       <div className="text-right flex-shrink-0">
         <div className="flex items-center gap-1 text-xs text-purple-400">
@@ -72,11 +149,12 @@ function ServerCard({ server, onConnect, isConnected }: { server: ServerType; on
 
 /* ──────────── HOME ──────────── */
 function HomeTab({
-  connectedServer, connectionState, onConnectBest, lang
+  connectedServer, connectionState, onConnectBest, onChooseOther, lang
 }: {
   connectedServer: ServerType | null;
   connectionState: ConnectionState;
   onConnectBest: () => void;
+  onChooseOther: () => void;
   lang: Lang;
 }) {
   const bestServer = useMemo(() => servers.reduce((a: ServerType, b: ServerType) => a.ping < b.ping ? a : b), []);
@@ -85,50 +163,61 @@ function HomeTab({
 
   return (
     <div className="px-5 pb-32 pt-6">
-      {/* Hero */}
-      <div className="relative rounded-3xl overflow-hidden mb-6">
-        <div className="bg-gradient-to-br from-purple-600/40 via-violet-700/40 to-indigo-800/40 border border-purple-500/30 p-6">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/20 rounded-full blur-3xl" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-3">
-              <ShieldIcon size={18} className="text-purple-300" />
-              <span className="text-purple-300 text-sm font-medium">
-                {isConnected ? t('protected', lang) : isConnecting ? t('connecting', lang) : t('notProtected', lang)}
-              </span>
-            </div>
-            <h2 className="text-4xl font-bold text-white mb-2">
-              {isConnected ? connectedServer?.flag || '' : isConnecting ? '🔗' : '🛡️'}
-            </h2>
-            <p className="text-white/80 text-lg font-medium mb-5">
-              {isConnected
-                ? `${t('connectedTo', lang)} ${connectedServer?.name}`
-                : isConnecting
-                ? t('securingConnection', lang)
-                : t('tapToConnect', lang)}
-            </p>
-
-            {!isConnected && !isConnecting && (
-              <button
-                onClick={onConnectBest}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-bold text-lg transition-all shadow-lg shadow-purple-600/30 hover:shadow-purple-500/40 active:scale-[0.98]"
-              >
-                {t('connectTo', lang)} {bestServer.city} {bestServer.flag}
-              </button>
-            )}
-
-            {isConnecting && (
-              <div className="w-full py-4 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center gap-3">
-                <div className="w-5 h-5 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
-                <span className="text-purple-300 font-medium">{t('securingConnection', lang)}</span>
-              </div>
-            )}
-          </div>
+      {/* Status header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <ShieldIcon size={18} className={isConnected ? 'text-green-400' : isConnecting ? 'text-purple-400' : 'text-purple-500'} />
+          <span className={`text-sm font-medium ${isConnected ? 'text-green-400' : isConnecting ? 'text-purple-300' : 'text-purple-400'}`}>
+            {isConnected ? t('protected', lang) : isConnecting ? t('connecting', lang) : t('notProtected', lang)}
+          </span>
         </div>
+        {/* Country flag (for connected or recommended) */}
+        {isConnected && connectedServer ? (
+          <span className="text-3xl">{connectedServer.flag}</span>
+        ) : isConnecting ? (
+          <span className="text-3xl opacity-50">🔗</span>
+        ) : (
+          <span className="text-3xl">{bestServer.flag}</span>
+        )}
       </div>
 
+      {/* Main text */}
+      <h2 className="text-2xl font-bold text-white mb-2">
+        {isConnected ? t('connectedTo', lang) : t('tapToConnect', lang)}
+      </h2>
+      {isConnected && (
+        <p className="text-purple-300 text-base font-medium mb-6">{connectedServer?.name}</p>
+      )}
+      {!isConnected && !isConnecting && <div className="mb-6" />}
+
+      {/* Connect button */}
+      {!isConnected && !isConnecting && (
+        <div className="space-y-3">
+          <button
+            onClick={onConnectBest}
+            className="w-full py-5 rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-bold text-lg transition-all shadow-lg shadow-purple-600/30 hover:shadow-purple-500/40 active:scale-[0.98]"
+          >
+            {t('connectTo', lang)} {bestServer.city} {bestServer.flag}
+          </button>
+          <button
+            onClick={onChooseOther}
+            className="w-full py-4 rounded-2xl bg-[#16102a] border border-purple-500/20 hover:border-purple-500/40 text-purple-300 hover:text-white transition-all flex items-center justify-center gap-2"
+          >
+            <GlobeIcon size={18} />
+            <span className="font-medium">{t('chooseOtherServer', lang)}</span>
+          </button>
+        </div>
+      )}
+
+      {isConnecting && (
+        <div className="w-full py-4 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center gap-3">
+          <div className="w-5 h-5 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
+          <span className="text-purple-300 font-medium">{t('securingConnection', lang)}</span>
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-3 mb-6 mt-6">
         <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-3 text-center">
           <WifiIcon size={20} className="text-purple-400 mx-auto mb-1" />
           <p className="text-white font-bold text-lg">{isConnected ? '256' : '0'}</p>
@@ -195,21 +284,32 @@ function ServersTab({
   }, []);
 
   const filtered = useMemo(() => {
-    let result = servers.filter((s: ServerType) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.country.toLowerCase().includes(search.toLowerCase()) ||
-      s.city.toLowerCase().includes(search.toLowerCase())
-    );
+    const q = search.toLowerCase().trim();
+    let result = servers;
+    if (q) {
+      result = result.filter((s: ServerType) => {
+        const countryRu = countries.find(c => c.en === s.country)?.ru || '';
+        return (
+          s.name.toLowerCase().includes(q) ||
+          s.city.toLowerCase().includes(q) ||
+          s.country.toLowerCase().includes(q) ||
+          countryRu.toLowerCase().includes(q)
+        );
+      });
+    }
     result.sort((a: ServerType, b: ServerType) => {
-      // Special servers first
       if (a.special && !b.special) return -1;
       if (!a.special && b.special) return 1;
       if (sortBy === 'ping') return a.ping - b.ping;
-      if (sortBy === 'country') return a.country.localeCompare(b.country);
+      if (sortBy === 'country') {
+        const aC = localizeCountry(a.country, lang);
+        const bC = localizeCountry(b.country, lang);
+        return aC.localeCompare(bC);
+      }
       return a.name.localeCompare(b.name);
     });
     return result;
-  }, [search, sortBy]);
+  }, [search, sortBy, lang]);
 
   return (
     <div className="px-5 pb-32 pt-6">
@@ -253,19 +353,20 @@ function ServersTab({
       </div>
 
       {/* Special servers section */}
-      {filtered.some(s => s.special) && (
+      {filtered.some((s: ServerType) => s.special) && (
         <div className="mb-3">
           <div className="flex items-center gap-2 mb-2">
             <ZapIcon size={14} className="text-yellow-400" />
-            <span className="text-yellow-400 text-xs font-bold uppercase tracking-wider">Special Servers</span>
+            <span className="text-yellow-400 text-xs font-bold uppercase tracking-wider">{t('specialServers', lang)}</span>
           </div>
           <div className="space-y-2 mb-3">
-            {filtered.filter((s: ServerType) => s.special).map(s => (
+            {filtered.filter((s: ServerType) => s.special).map((s: ServerType) => (
               <ServerCard
                 key={s.id}
                 server={s}
                 onConnect={() => onConnect(s)}
                 isConnected={connectionState === 'connected' && connectedServer?.id === s.id}
+                lang={lang}
               />
             ))}
           </div>
@@ -282,13 +383,14 @@ function ServersTab({
         )}
       </div>
 
-      <div className="space-y-2 max-h-[calc(100vh-240px)] overflow-y-auto pr-1">
+      <div className="space-y-2 max-h-[calc(100vh-260px)] overflow-y-auto pr-1">
         {filtered.filter((s: ServerType) => !s.special).map((s: ServerType) => (
           <ServerCard
             key={s.id}
             server={s}
             onConnect={() => onConnect(s)}
             isConnected={connectionState === 'connected' && connectedServer?.id === s.id}
+            lang={lang}
           />
         ))}
         {filtered.filter((s: ServerType) => !s.special).length === 0 && (
@@ -312,22 +414,19 @@ function SettingsPage({ lang, setLang, onBack }: { lang: Lang; setLang: (l: Lang
     <div className="px-5 pb-32 pt-6">
       <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
         <ArrowRightIcon size={16} className="rotate-180" />
-        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+        <span className="text-sm">{t('back', lang)}</span>
       </button>
       <h2 className="text-2xl font-bold text-white mb-6">{t('settingsTitle', lang)}</h2>
 
       <div className="space-y-3">
-        {/* Language */}
         <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
-                <GlobeIcon size={20} />
-              </div>
-              <div>
-                <p className="text-white font-medium">{t('language', lang)}</p>
-                <p className="text-purple-500 text-sm">{t('languageDesc', lang)}</p>
-              </div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+              <GlobeIcon size={20} />
+            </div>
+            <div>
+              <p className="text-white font-medium">{t('language', lang)}</p>
+              <p className="text-purple-500 text-sm">{t('languageDesc', lang)}</p>
             </div>
           </div>
           <div className="flex gap-2 ml-[52px]">
@@ -350,7 +449,6 @@ function SettingsPage({ lang, setLang, onBack }: { lang: Lang; setLang: (l: Lang
           </div>
         </div>
 
-        {/* Protocol */}
         <div className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
@@ -364,7 +462,6 @@ function SettingsPage({ lang, setLang, onBack }: { lang: Lang; setLang: (l: Lang
           </div>
         </div>
 
-        {/* Toggles */}
         {[
           { label: t('autoConnect', lang), desc: t('autoConnectDesc', lang), val: autoConnect, set: setAutoConnect },
           { label: t('killSwitchToggle', lang), desc: t('killSwitchToggleDesc', lang), val: killSwitch, set: setKillSwitch },
@@ -384,7 +481,6 @@ function SettingsPage({ lang, setLang, onBack }: { lang: Lang; setLang: (l: Lang
           </div>
         ))}
 
-        {/* Version */}
         <div className="text-center pt-4">
           <p className="text-purple-600 text-xs">{t('version', lang)}</p>
         </div>
@@ -401,7 +497,7 @@ function SecurityPage({ lang, onBack }: { lang: Lang; onBack: () => void }) {
     <div className="px-5 pb-32 pt-6">
       <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
         <ArrowRightIcon size={16} className="rotate-180" />
-        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+        <span className="text-sm">{t('back', lang)}</span>
       </button>
       <h2 className="text-2xl font-bold text-white mb-6">{t('securityTitle', lang)}</h2>
       <div className="space-y-3">
@@ -442,7 +538,7 @@ function DevicesPage({ lang, onBack }: { lang: Lang; onBack: () => void }) {
     <div className="px-5 pb-32 pt-6">
       <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
         <ArrowRightIcon size={16} className="rotate-180" />
-        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+        <span className="text-sm">{t('back', lang)}</span>
       </button>
       <h2 className="text-2xl font-bold text-white mb-6">{t('devicesTitle', lang)}</h2>
       <p className="text-purple-400 text-sm mb-4">{t('connectedDevices', lang)}</p>
@@ -474,7 +570,7 @@ function SubscriptionPage({ lang, onBack }: { lang: Lang; onBack: () => void }) 
     <div className="px-5 pb-32 pt-6">
       <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
         <ArrowRightIcon size={16} className="rotate-180" />
-        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+        <span className="text-sm">{t('back', lang)}</span>
       </button>
       <h2 className="text-2xl font-bold text-white mb-6">{t('subscriptionTitle', lang)}</h2>
       <div className="bg-gradient-to-br from-purple-600/20 to-violet-700/20 border border-purple-500/30 rounded-2xl p-5 mb-6">
@@ -505,13 +601,13 @@ function PrivacyPage({ lang, onBack }: { lang: Lang; onBack: () => void }) {
     <div className="px-5 pb-32 pt-6">
       <button onClick={onBack} className="flex items-center gap-2 text-purple-400 mb-4 hover:text-purple-300 transition-colors">
         <ArrowRightIcon size={16} className="rotate-180" />
-        <span className="text-sm">{lang === 'ru' ? 'Назад' : 'Back'}</span>
+        <span className="text-sm">{t('back', lang)}</span>
       </button>
       <h2 className="text-2xl font-bold text-white mb-6">{t('privacyTitle', lang)}</h2>
       <div className="space-y-3">
         {[
           { icon: <ShieldIcon size={20} />, label: t('dataCollection', lang), desc: t('dataCollectionDesc', lang) },
-          { icon: <EyeIcon size={20} />, label: t('adTracking', lang), desc: t('adTrackingDesc', lang) },
+          { icon: <EyeIcon />, label: t('adTracking', lang), desc: t('adTrackingDesc', lang) },
         ].map((item, i) => (
           <div key={i} className="bg-[#16102a] border border-purple-500/10 rounded-2xl p-4 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">{item.icon}</div>
@@ -529,9 +625,9 @@ function PrivacyPage({ lang, onBack }: { lang: Lang; onBack: () => void }) {
   );
 }
 
-function EyeIcon({ size = 24 }: { size?: number }) {
+function EyeIcon() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -669,7 +765,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [connectedServer, setConnectedServer] = useState<ServerType | null>(null);
-  const [_connectingServer, setConnectingServer] = useState<ServerType | null>(null);
+  const [connectingServer, setConnectingServer] = useState<ServerType | null>(null);
   const [progress, setProgress] = useState(0);
   const [subPage, setSubPage] = useState<SubPage>(null);
   const [lang, setLang] = useState<Lang>('ru');
@@ -707,9 +803,9 @@ export default function App() {
           title: t('connectionError', lang),
           message: t('connectionErrorDesc', lang),
           serverFlag: server.flag,
-          serverName: `${server.city}, ${server.country}`,
+          serverName: `${server.city ? server.city + ', ' : ''}${localizeCountry(server.country, lang)}`,
           actionLabel: t('retry', lang),
-          onAction: () => connect(server),
+          onAction: () => { hideToast(); connect(server); },
         });
       } else {
         setProgress(100);
@@ -720,7 +816,7 @@ export default function App() {
           title: t('connectionSuccess', lang),
           message: t('connectionSuccessDesc', lang),
           serverFlag: server.flag,
-          serverName: `${server.city}, ${server.country}`,
+          serverName: `${server.city ? server.city + ', ' : ''}${localizeCountry(server.country, lang)}`,
           actionLabel: t('disconnect', lang),
           onAction: () => { setConnectionState('disconnected'); setConnectedServer(null); hideToast(); },
         });
@@ -729,18 +825,21 @@ export default function App() {
     }, duration);
   }, [lang, showToast, hideToast]);
 
-  // disconnect handled via toast onAction
-  void (function() {})();
+  const closeModal = useCallback(() => {
+    setConnectionState('disconnected');
+    setConnectingServer(null);
+    setProgress(0);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }, []);
 
   const bestServer = useMemo(() => servers.reduce((a: ServerType, b: ServerType) => a.ping < b.ping ? a : b), []);
 
-  // Connection progress bar (mini)
-  const phaseText = connectionState === 'connecting'
-    ? progress < 30 ? t('resolving', lang)
-    : progress < 60 ? t('establishing', lang)
-    : progress < 90 ? t('verifying', lang)
-    : t('finalizing', lang)
-    : '';
+  const Footer = () => (
+    <div className="text-center pt-8 pb-4">
+      <p className="text-[11px] text-purple-700">{t('allRightsReserved', lang)}</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0b0714] text-white selection:bg-purple-500/40">
@@ -797,37 +896,40 @@ export default function App() {
             </span>
           </div>
         </div>
-        {/* Connection progress bar */}
-        {connectionState === 'connecting' && (
-          <div className="max-w-lg mx-auto">
-            <div className="flex items-center justify-between px-5 py-1.5 text-[10px] text-purple-400 bg-purple-500/5">
-              <span>{phaseText}</span>
-              <span>{Math.round(progress)}%</span>
-            </div>
-            <div className="h-0.5 bg-purple-500/10">
-              <div className="h-full bg-gradient-to-r from-purple-600 via-violet-500 to-purple-400 transition-all duration-300" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Content */}
-      <div className="max-w-lg mx-auto">
+      <div className="max-w-lg mx-auto pb-24">
         {activeTab === 'home' && (
-          <HomeTab connectedServer={connectedServer} connectionState={connectionState} onConnectBest={() => connect(bestServer)} lang={lang} />
+          <>
+            <HomeTab
+              connectedServer={connectedServer}
+              connectionState={connectionState}
+              onConnectBest={() => connect(bestServer)}
+              onChooseOther={() => setActiveTab('servers')}
+              lang={lang}
+            />
+            <Footer />
+          </>
         )}
         {activeTab === 'servers' && (
-          <ServersTab onConnect={connect} connectedServer={connectedServer} connectionState={connectionState} lang={lang} />
+          <>
+            <ServersTab onConnect={connect} connectedServer={connectedServer} connectionState={connectionState} lang={lang} />
+            <Footer />
+          </>
         )}
         {activeTab === 'profile' && (
-          <ProfileTab subPage={subPage} setSubPage={setSubPage} lang={lang} setLang={setLang} />
+          <>
+            <ProfileTab subPage={subPage} setSubPage={setSubPage} lang={lang} setLang={setLang} />
+            <Footer />
+          </>
         )}
-        {activeTab === 'support' && <SupportTab lang={lang} />}
-      </div>
-
-      {/* Footer */}
-      <div className="fixed bottom-[72px] left-0 right-0 z-30 text-center pb-2 pointer-events-none">
-        <p className="text-[10px] text-purple-800/60">{t('allRightsReserved', lang)}</p>
+        {activeTab === 'support' && (
+          <>
+            <SupportTab lang={lang} />
+            <Footer />
+          </>
+        )}
       </div>
 
       {/* Bottom navigation */}
@@ -856,11 +958,15 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Language override for Settings sub-page */}
-      {subPage === 'settings' && (
-        <div className="hidden">
-          {/* We handle lang changes directly in the component */}
-        </div>
+      {/* Connection modal */}
+      {connectingServer && (connectionState === 'connecting' || connectionState === 'connected' || connectionState === 'error') && (
+        <ConnectionModal
+          server={connectingServer}
+          state={connectionState}
+          progress={progress}
+          onClose={closeModal}
+          lang={lang}
+        />
       )}
     </div>
   );
